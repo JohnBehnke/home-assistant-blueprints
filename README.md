@@ -15,7 +15,7 @@ A collection of Home Assistant blueprints for automations and scripts.
 
 Send a notification to one or more devices with optional action buttons, configurable timeout, and automatic clearing. Supports iOS notification levels (Critical, Time Sensitive, Default, Quiet), custom sounds, click URLs, and notification tags. Each action button can trigger its own automation sequence, and a separate action can run on timeout.
 
-[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?url=https://github.com/JohnBehnke/home-assistant-blueprints/raw/main/advanced_actionable_notification.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FJohnBehnke%2Fhome-assistant-blueprints%2Frefs%2Fheads%2Fmain%2Fadvanced-actionable-notification.yaml)
 
 #### Options
 
