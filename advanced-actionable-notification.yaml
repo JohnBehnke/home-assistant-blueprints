@@ -1,0 +1,303 @@
+blueprint:
+  name: Advanced Actionable Notification
+  description: >-
+    Send a notification to one or more devices with optional action buttons,
+    configurable timeout, and automatic clearing. Supports iOS notification
+    levels (Critical, Time Sensitive, Default, Quiet), custom sounds, click
+    URLs, and notification tags. Each action button can trigger its own
+    automation sequence, and a separate action can run on timeout.
+  domain: script
+  source_url: "https://github.com/home-assistant/core/blob/master/homeassistant/components/script/blueprints/confirmable_notification.yaml"
+  author: Home Assistant
+  input:
+    notify_devices:
+      name: Devices to notify
+      description: >-
+        Select one or more devices to receive the notification.
+        Devices must run the official Home Assistant app.
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+          multiple: true
+    title:
+      name: "Title"
+      description: "The title of the notification."
+      default: ""
+      selector:
+        text:
+    message:
+      name: "Message"
+      description: "The message body"
+      selector:
+        text:
+    include_confirm:
+      name: "Enable Confirmation Button"
+      description: "Enable or disable the confirmation action button."
+      default: "enable_confirm"
+      selector:
+        select:
+          options:
+            - label: Enable
+              value: enable_confirm
+            - label: Disable
+              value: disable_confirm
+          sort: false
+          multiple: false
+          custom_value: false
+    confirm_text:
+      name: "Confirmation Text"
+      description: "Text to show on the confirmation button."
+      default: "Confirm"
+      selector:
+        text:
+    confirm_action:
+      name: "Confirmation Action"
+      description: "Action to run when notification is confirmed."
+      default: []
+      selector:
+        action:
+    include_dismiss:
+      name: "Enable Dismiss Button"
+      description: "Enable or disable the dismiss action button."
+      default: "enable_dismiss"
+      selector:
+        select:
+          options:
+            - label: Enable
+              value: enable_dismiss
+            - label: Disable
+              value: disable_dismiss
+          sort: false
+          multiple: false
+          custom_value: false
+    dismiss_text:
+      name: "Dismiss Text"
+      description: "Text to show on the dismiss button."
+      default: "Dismiss"
+      selector:
+        text:
+    dismiss_action:
+      name: "Dismiss Action"
+      description: "Action to run when notification is dismissed."
+      default: []
+      selector:
+        action:
+    timeout_minutes:
+      name: "Timeout (Minutes)"
+      description: >-
+        How long to wait for a response before timing out. Set to 0 to
+        wait indefinitely.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 1440
+          step: 1
+          unit_of_measurement: "minutes"
+          mode: box
+    timeout_action:
+      name: "Timeout Action"
+      description: "Action to run when the notification times out without a response."
+      default: []
+      selector:
+        action:
+    clear_after_response:
+      name: "Clear Notification After Response"
+      description: >-
+        Automatically clear the notification from all devices after a button
+        is pressed or on timeout. Requires a Notification Tag to be set.
+      default: "enable_clear"
+      selector:
+        select:
+          options:
+            - label: Enable
+              value: enable_clear
+            - label: Disable
+              value: disable_clear
+          sort: false
+          multiple: false
+          custom_value: false
+    notify_click_url:
+      name: "Click URL (Optional)"
+      description: >-
+        URL to open when the notification body is tapped. Can be a Home
+        Assistant path (e.g. /lovelace/cameras) or an external URL.
+        Leave blank for default behavior.
+      default: ""
+      selector:
+        text:
+    notify_interruption_level:
+      name: "Interruption Level - iOS Only"
+      description: >-
+        Configure the interruption level for iOS 15+ devices.
+        Critical and Time Sensitive notifications must be enabled in the
+        Home Assistant app settings. Time Sensitive must also be allowed
+        in your Focus settings.
+      default: "active"
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: Default
+              value: active
+            - label: Critical Notifications
+              value: critical
+            - label: Time Sensitive Notifications
+              value: time-sensitive
+            - label: Quiet Notifications Without Waking Screen
+              value: passive
+          sort: false
+          multiple: false
+          custom_value: false
+    notify_sound:
+      name: "Notification Sound - iOS Only (Optional)"
+      description: >-
+        Custom notification sound filename including extension
+        (e.g. US-EN-Morgan-Freeman-Roommate-Is-Arriving.wav). The Home
+        Assistant iOS app includes built-in sounds, or you can import
+        your own. Leave blank for the default sound.
+      default: ""
+      selector:
+        text:
+    notify_tag:
+      name: "Notification Tag (Optional)"
+      description: >-
+        Set a tag for this notification. When a new notification with the same
+        tag is sent, it replaces the previous one, preventing duplicates.
+        Also required for the Clear Notification After Response feature.
+        Leave blank for no tag.
+      default: ""
+      selector:
+        text:
+
+mode: restart
+
+sequence:
+  - alias: "Set up variables"
+    variables:
+      action_confirm: "{{ 'CONFIRM_' ~ context.id }}"
+      action_dismiss: "{{ 'DISMISS_' ~ context.id }}"
+      notify_interruption_level: !input notify_interruption_level
+      notify_sound: !input notify_sound
+      notify_tag: !input notify_tag
+      notify_click_url: !input notify_click_url
+      confirm_text: !input confirm_text
+      dismiss_text: !input dismiss_text
+      include_confirm: !input include_confirm
+      include_dismiss: !input include_dismiss
+      timeout_minutes: !input timeout_minutes
+      clear_after_response: !input clear_after_response
+      has_confirm: "{{ include_confirm == 'enable_confirm' }}"
+      has_dismiss: "{{ include_dismiss == 'enable_dismiss' }}"
+      has_actions: "{{ has_confirm or has_dismiss }}"
+      notification_data: >-
+        {% set message = namespace(data={}) %}
+        {% set push = namespace(data={}) %}
+        {% if notify_interruption_level in ['active', 'critical', 'time-sensitive', 'passive'] %}
+          {% set push.data = dict(push.data, **{ 'interruption-level': notify_interruption_level }) %}
+        {% endif %}
+        {% if notify_sound | length > 0 %}
+          {% set push.data = dict(push.data, **{ 'sound': notify_sound }) %}
+        {% endif %}
+        {% if push.data %}
+          {% set message.data = dict(message.data, **{ 'push': push.data }) %}
+        {% endif %}
+        {% if notify_tag | length > 0 %}
+          {% set message.data = dict(message.data, **{ 'tag': notify_tag }) %}
+        {% endif %}
+        {% if notify_click_url | length > 0 %}
+          {% set message.data = dict(message.data, **{ 'url': notify_click_url, 'clickAction': notify_click_url }) %}
+        {% endif %}
+        {% set actions = [] %}
+        {% if include_confirm == 'enable_confirm' %}
+          {% set actions = actions + [{'action': action_confirm, 'title': confirm_text}] %}
+        {% endif %}
+        {% if include_dismiss == 'enable_dismiss' %}
+          {% set actions = actions + [{'action': action_dismiss, 'title': dismiss_text}] %}
+        {% endif %}
+        {% if actions | length > 0 %}
+          {% set message.data = dict(message.data, **{ 'actions': actions }) %}
+        {% endif %}
+        {{ message.data }}
+  - alias: "Send notification to each device"
+    repeat:
+      for_each: !input notify_devices
+      sequence:
+        - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+          data:
+            title: !input title
+            message: !input message
+            data: "{{ notification_data }}"
+          continue_on_error: true
+  - alias: "Await response and run actions"
+    if: "{{ has_actions }}"
+    then:
+      - alias: "Awaiting response"
+        wait_for_trigger:
+          - trigger: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: "{{ action_confirm }}"
+          - trigger: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: "{{ action_dismiss }}"
+        timeout:
+          minutes: "{{ timeout_minutes | int if timeout_minutes | int > 0 else 525600 }}"
+        continue_on_timeout: true
+      - alias: "Handle response or timeout"
+        choose:
+          - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == action_confirm }}"
+            sequence:
+              - alias: "Clear notification from all devices"
+                if: "{{ clear_after_response == 'enable_clear' and notify_tag | length > 0 }}"
+                then:
+                  - repeat:
+                      for_each: !input notify_devices
+                      sequence:
+                        - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                          data:
+                            message: clear_notification
+                            data:
+                              tag: "{{ notify_tag }}"
+                          continue_on_error: true
+              - alias: "Run confirmation action"
+                choose:
+                  - conditions: "{{ true }}"
+                    sequence: !input confirm_action
+          - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action == action_dismiss }}"
+            sequence:
+              - alias: "Clear notification from all devices"
+                if: "{{ clear_after_response == 'enable_clear' and notify_tag | length > 0 }}"
+                then:
+                  - repeat:
+                      for_each: !input notify_devices
+                      sequence:
+                        - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                          data:
+                            message: clear_notification
+                            data:
+                              tag: "{{ notify_tag }}"
+                          continue_on_error: true
+              - alias: "Run dismiss action"
+                choose:
+                  - conditions: "{{ true }}"
+                    sequence: !input dismiss_action
+        default:
+          - alias: "Timed out - clear notification from all devices"
+            if: "{{ clear_after_response == 'enable_clear' and notify_tag | length > 0 }}"
+            then:
+              - repeat:
+                  for_each: !input notify_devices
+                  sequence:
+                    - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                      data:
+                        message: clear_notification
+                        data:
+                          tag: "{{ notify_tag }}"
+                      continue_on_error: true
+          - alias: "Run timeout action"
+            choose:
+              - conditions: "{{ true }}"
+                sequence: !input timeout_action
